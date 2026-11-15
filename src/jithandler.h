@@ -37,6 +37,10 @@ class JITHandler: public AMXHandler<JITHandler> {
  public:
   int Exec(cell *retval, int index);
 
+  // True until the first Exec compiles the script (that call also runs
+  // OnJITCompile and then the public it was asked for).
+  bool NeedsCompile() const { return state_ == INIT; }
+
  private:
   explicit JITHandler(AMX *amx);
   ~JITHandler();

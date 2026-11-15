@@ -166,7 +166,19 @@ class AsmJitLoggerAdapter: public asmjit::Logger {
   amxjit::Logger *logger_;
 };
 
+InvalidJumpHandler invalid_jump_handler = 0;
+
+void AMXJIT_CDECL OnInvalidJump(cell address) {
+  if (invalid_jump_handler != 0) {
+    invalid_jump_handler(address);
+  }
+}
+
 } // anonymous namespace
+
+void SetInvalidJumpHandler(InvalidJumpHandler handler) {
+  invalid_jump_handler = handler;
+}
 
 CodeBuffer::CodeBuffer(void *code):
   code_(code)
@@ -1849,8 +1861,18 @@ void CompilerImpl::EmitJumpHelper() {
     asm_.lea(esp, dword_ptr(esp, 4));
     asm_.jmp(edx);
 
-  // Continue execution as if there was no jump at all (this is what AMX does).
+  // Continue execution as if there was no jump at all (this is what AMX does),
+  // but report it: a silently skipped jump is very hard to diagnose.
   asm_.bind(invalid_address_label);
+    asm_.push(eax);
+    asm_.push(ecx);
+    asm_.push(edx);
+    asm_.push(eax); // address
+    asm_.call(reinterpret_cast<asmjit::Ptr>(&OnInvalidJump));
+    asm_.add(esp, 4);
+    asm_.pop(edx);
+    asm_.pop(ecx);
+    asm_.pop(eax);
     asm_.ret();
 }
 
@@ -1938,7 +1960,9 @@ void CompilerImpl::EmitSysreqCHelper() {
     asm_.push(edx); // amx
     asm_.call(dword_ptr(edx, offsetof(AMX, callback)));
     asm_.mov(edi, eax);
-    asm_.mov(eax, dword_ptr(ecx)); // eax = *result
+    // ECX is caller-saved and open.mp's amx_Callback clobbers it; read the
+    // result slot via ESP (it sits just above the 4 pushed arguments).
+    asm_.mov(eax, dword_ptr(esp, 16)); // eax = *result
     asm_.add(esp, 20);
 
     asm_.pop(ecx); // ALT

@@ -25,6 +25,7 @@
 #include <cassert>
 #include <cstdarg>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <configreader.h>
 #include "jithandler.h"
@@ -79,7 +80,16 @@ cell OnJITError(AMX *amx) {
   return 0;
 }
 
+void AMXJIT_CDECL ReportInvalidJump(cell address) {
+  static int reported = 0;
+  if (reported++ < 20) {
+    jit_printf("Jump to invalid address 0x%x ignored (SCTRL 6 / JUMP.PRI)",
+               (unsigned)address);
+  }
+}
+
 amxjit::CodeBuffer *Compile(AMX *amx) {
+  amxjit::SetInvalidJumpHandler(ReportInvalidJump);
   if (!OnJITCompile(amx)) {
     jit_printf("Compilation was disabled");
     return 0;
@@ -144,9 +154,27 @@ JITHandler::~JITHandler() {
   }
 }
 
+namespace {
+
+// open.mp builds the AMX with sNAMEMAX=63, so the buffer must hold 64 chars.
+struct PublicName {
+  char str[64];
+  PublicName(AMX *amx, int index) {
+    std::strcpy(str, "<main/cont>");
+    if (index >= 0 && amx_GetPublic(amx, index, str) != AMX_ERR_NONE) {
+      std::strcpy(str, "<invalid>");
+    }
+  }
+};
+
+} // anonymous namespace
+
 int JITHandler::Exec(cell *retval, int index) {
   switch (state_) {
     case INIT:
+      // Keep the caller's index even if OnJITCompile rewrites the public
+      // table: YSI puts a repair stub in the old slot (Hooks_RepairJITInit)
+      // that restores the table on this first call.
       state_ = COMPILE;
       if ((code_ = Compile(amx())) != 0) {
         state_ = COMPILE_SUCCEDED;
@@ -156,7 +184,19 @@ int JITHandler::Exec(cell *retval, int index) {
       }
     case COMPILE_SUCCEDED: {
       amxjit::CodeEntryPoint entry_point = code_->GetEntryPoint();
-      return entry_point(index, retval);
+      int error = entry_point(index, retval);
+      // Hosts like open.mp don't report runtime errors, so a failing public
+      // would otherwise stop silently. Capped to avoid flooding the log.
+      static int reported = 0;
+      // index < AMX_EXEC_CONT: sampgdk (e.g. inside Streamer) forges such
+      // indexes for publics the script lacks and expects AMX_ERR_INDEX.
+      if (error != AMX_ERR_NONE && error != AMX_ERR_SLEEP &&
+          index >= AMX_EXEC_CONT && reported < 50) {
+        reported++;
+        jit_printf("Run time error %d in public '%s' (index %d)",
+                   error, PublicName(amx(), index).str, index);
+      }
+      return error;
     }
     case COMPILE:
     case COMPILE_FAILED:

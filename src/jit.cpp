@@ -24,6 +24,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <subhook.h>
 #include <vector>
@@ -39,9 +40,12 @@
 #endif
 
 typedef int (AMXAPI *AMX_EXEC)(AMX *amx, cell *retval, int index);
+typedef int (AMXAPI *AMX_FINDPUBLIC)(AMX *amx, const char *name, int *index);
 
 extern void *pAMXFunctions;
 static subhook::Hook exec_hook;
+static subhook::Hook find_public_hook;
+static bool public_table_unsorted = false;
 
 #ifdef LINUX
   static cell *opcode_table = NULL;
@@ -105,10 +109,49 @@ int AMXAPI amx_Exec_JIT(AMX *amx, cell *retval, int index) {
       return AMX_ERR_NONE;
     }
   #endif
-  int error = JITHandler::GetHandler(amx)->Exec(retval, index);
+  JITHandler *handler = JITHandler::GetHandler(amx);
+  // The first call compiles the script and runs OnJITCompile, where YSI
+  // compacts the public table without moving its start; a repair stub run by
+  // this same call fixes the header. Until then the table is unsorted.
+  bool first_call = handler->NeedsCompile();
+  if (first_call) {
+    public_table_unsorted = true;
+  }
+  int error = handler->Exec(retval, index);
   if (error == AMX_ERR_INIT_JIT) {
     AMX_EXEC exec = (AMX_EXEC)exec_hook.GetTrampoline();
-    return exec(amx, retval, index);
+    error = exec(amx, retval, index);
+  }
+  if (first_call) {
+    public_table_unsorted = false;
+  }
+  return error;
+}
+
+// Linear search from the end: YSI's compacted (valid) entries sit at the end
+// and stale ones at the front, whose name offsets may be garbage.
+int FindPublicLinear(AMX *amx, const char *name, int *index) {
+  AMX_HEADER *hdr = reinterpret_cast<AMX_HEADER *>(amx->base);
+  AMX_FUNCSTUBNT *publics =
+    reinterpret_cast<AMX_FUNCSTUBNT *>(amx->base + hdr->publics);
+  int count = (hdr->natives - hdr->publics) / hdr->defsize;
+  for (int i = count - 1; i >= 0; i--) {
+    uint32_t ofs = publics[i].nameofs;
+    if (ofs >= static_cast<uint32_t>(hdr->nametable) &&
+        ofs < static_cast<uint32_t>(hdr->cod) &&
+        std::strcmp(reinterpret_cast<char *>(amx->base + ofs), name) == 0) {
+      *index = i;
+      return AMX_ERR_NONE;
+    }
+  }
+  return AMX_ERR_NOTFOUND;
+}
+
+int AMXAPI amx_FindPublic_JIT(AMX *amx, const char *name, int *index) {
+  AMX_FINDPUBLIC find_public = (AMX_FINDPUBLIC)find_public_hook.GetTrampoline();
+  int error = find_public(amx, name, index);
+  if (error == AMX_ERR_NOTFOUND && public_table_unsorted) {
+    error = FindPublicLinear(amx, name, index);
   }
   return error;
 }
@@ -144,6 +187,10 @@ PLUGIN_EXPORT bool PLUGIN_CALL Load(void **ppData) {
     amx.flags &= ~AMX_FLAG_BROWSE;
   #endif
   exec_hook.Install(exec_start, (void *)amx_Exec_JIT);
+  if (!find_public_hook.Install(GetAMXFunction(PLUGIN_AMX_EXPORT_FindPublic),
+                                (void *)amx_FindPublic_JIT)) {
+    logprintf("  JIT: could not hook amx_FindPublic, YSI init may fail");
+  }
 
   logprintf("  JIT plugin %s", PROJECT_VERSION_STRING);
   return true;

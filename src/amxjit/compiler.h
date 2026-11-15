@@ -41,6 +41,12 @@ enum DebugFlags {
   DEBUG_BREAKPOINTS = 2
 };
 
+// Called at run time when JIT code jumps (SCTRL 6, JUMP.PRI) to an address
+// that isn't an instruction start; execution continues after the jump like
+// the AMX interpreter does, so without this the failure is silent.
+typedef void (AMXJIT_CDECL *InvalidJumpHandler)(cell address);
+void SetInvalidJumpHandler(InvalidJumpHandler handler);
+
 class CompileErrorHandler {
  public:
   virtual ~CompileErrorHandler() {}
