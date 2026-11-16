@@ -53,11 +53,21 @@ void jit_printf(const char *format, ...) {
 
 class ErrorHandler: public amxjit::CompileErrorHandler {
  public:
+  explicit ErrorHandler(AMX *amx): amx_(amx) {}
   virtual void Execute(const amxjit::Instruction &instr) {
     jit_printf("Invalid or unsupported instruction at address %08x:",
                instr.address());
     jit_printf("  => %s", instr.ToString().c_str());
+    // Raw cells tell a relocated opcode (Linux) apart from a decoding slip.
+    AMX_HEADER *hdr = reinterpret_cast<AMX_HEADER *>(amx_->base);
+    const cell *code = reinterpret_cast<const cell *>(amx_->base + hdr->cod);
+    const cell *p = code + instr.address() / sizeof(cell);
+    jit_printf("  raw: %08x %08x %08x (opcode id %d, flags %04x)",
+               (unsigned)p[0], (unsigned)p[1], (unsigned)p[2],
+               (int)amxjit::RelocateOpcode(p[0]), (unsigned)amx_->flags);
   }
+ private:
+  AMX *amx_;
 };
 
 cell OnJITCompile(AMX *amx) {
@@ -115,7 +125,7 @@ amxjit::CodeBuffer *Compile(AMX *amx) {
   }
 
   amxjit::Compiler compiler;
-  ErrorHandler error_handler;
+  ErrorHandler error_handler(amx);
   compiler.SetLogger(logger);
   compiler.SetErrorHandler(&error_handler);
   compiler.SetSysreqDEnabled(enable_sysreq_d);

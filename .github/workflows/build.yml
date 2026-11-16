@@ -86,6 +86,42 @@ jobs:
           { echo "| image | glibc | jit.so |"; echo "|---|---|---|"; cat rows; } | tee -a "$GITHUB_STEP_SUMMARY"
           exit $fail
 
+  omp-linux:
+    # jit.so as a legacy plugin on a real open.mp Linux server (32-bit container).
+    needs: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: jit-linux
+          path: dist
+      - name: Fetch open.mp server and pawncc
+        run: |
+          curl -sSL https://github.com/openmultiplayer/open.mp/releases/download/v1.6.7.3218/open.mp-linux-x86.tar.gz | tar xz
+          curl -sSL https://github.com/pawn-lang/compiler/releases/download/v3.10.10/pawnc-3.10.10-linux.tar.gz | tar xz
+          srv=$(dirname "$(find . -name omp-server -type f | head -1)")
+          echo "SERVER_DIR=$srv" >> "$GITHUB_ENV"
+          echo "::notice title=open.mp server dir::$srv"
+      - name: Run gamemode with JIT
+        run: |
+          set +e
+          fail=0
+          for flags in "-d3" "-d0 -O2" "-d3 -O2"; do
+            docker run --rm -v "$PWD:/w" -w /w i386/debian:12 \
+              sh tests/omp_linux/run.sh dist/jit.so pawnc-3.10.10-linux "$SERVER_DIR" $flags > out.txt 2>&1
+            r=$?
+            echo "::group::pawncc $flags (exit $r)"; cat out.txt; echo "::endgroup::"
+            if [ $r -eq 0 ]; then
+              echo "::notice title=open.mp linux $flags::OK"
+            else
+              fail=1
+              echo "::error title=open.mp linux $flags (exit $r)::$(grep -E '\[jit\]|smoke|rror|JIT plugin' out.txt | head -12 | tr '\n' '|')"
+              echo "::notice title=disasm $flags::$(sed -n '/^--- disassembly/,$p' out.txt | head -30 | tr '\n' '|')"
+            fi
+          done
+          exit $fail
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [windows, linux]
