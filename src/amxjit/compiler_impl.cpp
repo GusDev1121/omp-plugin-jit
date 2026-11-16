@@ -1060,8 +1060,16 @@ CodeBuffer *CompilerImpl::Compile(AMXRef amx) {
         asm_.push(eax);
         asm_.call(sysreq_c_helper_label_);
         break;
-      case OP_SYSREQ_C: {
+      case OP_SYSREQ_C:
+      case OP_SYSREQ_N: {
         // Call system service.
+        // SYSREQ.N index nbytes = PUSH.C nbytes; SYSREQ.C index;
+        // STACK nbytes+4 (ALT is kept, as our sysreq.c does).
+        // shortcut: no jit_sleep resume inside SYSREQ.N (open.mp only).
+        bool sysreq_n = instr.opcode().GetId() == OP_SYSREQ_N;
+        if (sysreq_n) {
+          asm_.push(instr.operand(1));
+        }
         const char *name = amx.GetNativeName(instr.operand());
         if (name == 0) {
           error = true;
@@ -1084,8 +1092,56 @@ CodeBuffer *CompilerImpl::Compile(AMXRef amx) {
             asm_.call(sysreq_c_helper_label_);
           }
         }
+        if (sysreq_n) {
+          asm_.add(esp, instr.operand(1) + 4);
+        }
         break;
       }
+      case OP_PUSH2_C: case OP_PUSH3_C: case OP_PUSH4_C: case OP_PUSH5_C:
+        // PUSH.C for each operand, in order.
+        for (std::size_t i = 0; i < instr.operands().size(); i++) {
+          asm_.push(instr.operand(i));
+        }
+        break;
+      case OP_PUSH2: case OP_PUSH3: case OP_PUSH4: case OP_PUSH5:
+        // PUSH for each operand, in order.
+        for (std::size_t i = 0; i < instr.operands().size(); i++) {
+          asm_.push(dword_ptr(ebx, instr.operand(i)));
+        }
+        break;
+      case OP_PUSH2_S: case OP_PUSH3_S: case OP_PUSH4_S: case OP_PUSH5_S:
+        // PUSH.S for each operand, in order.
+        for (std::size_t i = 0; i < instr.operands().size(); i++) {
+          asm_.push(dword_ptr(ebp, instr.operand(i)));
+        }
+        break;
+      case OP_PUSH2_ADR: case OP_PUSH3_ADR: case OP_PUSH4_ADR:
+      case OP_PUSH5_ADR:
+        // PUSH.ADR for each operand, in order.
+        for (std::size_t i = 0; i < instr.operands().size(); i++) {
+          asm_.lea(edx, dword_ptr(ebp, instr.operand(i)));
+          asm_.sub(edx, ebx);
+          asm_.push(edx);
+        }
+        break;
+      case OP_LOAD_BOTH:
+        // PRI = [address1], ALT = [address2]
+        asm_.mov(eax, dword_ptr(ebx, instr.operand(0)));
+        asm_.mov(ecx, dword_ptr(ebx, instr.operand(1)));
+        break;
+      case OP_LOAD_S_BOTH:
+        // PRI = [FRM + offset1], ALT = [FRM + offset2]
+        asm_.mov(eax, dword_ptr(ebp, instr.operand(0)));
+        asm_.mov(ecx, dword_ptr(ebp, instr.operand(1)));
+        break;
+      case OP_CONST:
+        // [address] = value
+        asm_.mov(dword_ptr(ebx, instr.operand(0)), instr.operand(1));
+        break;
+      case OP_CONST_S:
+        // [FRM + offset] = value
+        asm_.mov(dword_ptr(ebp, instr.operand(0)), instr.operand(1));
+        break;
       case OP_SYSREQ_D: {
         // Call system service.
         const char *name = amx.GetNativeName(amx.FindNative(instr.operand()));

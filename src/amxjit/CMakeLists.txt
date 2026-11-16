@@ -29,3 +29,9 @@ if(CMAKE_COMPILER_IS_GNUCXX)
 endif()
 
 target_link_libraries(amxjit asmjit)
+
+if(BUILD_TESTING)
+  add_executable(opcode_test opcode_test.cpp)
+  target_link_libraries(opcode_test amxjit)
+  add_test(NAME opcode_test COMMAND opcode_test)
+endif()

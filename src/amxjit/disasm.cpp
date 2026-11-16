@@ -187,7 +187,33 @@ const Instruction::StaticInstrInfo Instruction::info[NUM_OPCODES] = {
                                            REG_STK | REG_FRM |
                                            REG_CIP},
   {"symtag",         REG_NONE,             REG_NONE},
-  {"break",          REG_NONE,             REG_NONE}
+  {"break",          REG_NONE,             REG_NONE},
+  {"push2.c",        REG_STK,              REG_STK},
+  {"push2",          REG_STK,              REG_STK},
+  {"push2.s",        REG_STK | REG_FRM,    REG_STK},
+  {"push2.adr",      REG_STK | REG_FRM,    REG_STK},
+  {"push3.c",        REG_STK,              REG_STK},
+  {"push3",          REG_STK,              REG_STK},
+  {"push3.s",        REG_STK | REG_FRM,    REG_STK},
+  {"push3.adr",      REG_STK | REG_FRM,    REG_STK},
+  {"push4.c",        REG_STK,              REG_STK},
+  {"push4",          REG_STK,              REG_STK},
+  {"push4.s",        REG_STK | REG_FRM,    REG_STK},
+  {"push4.adr",      REG_STK | REG_FRM,    REG_STK},
+  {"push5.c",        REG_STK,              REG_STK},
+  {"push5",          REG_STK,              REG_STK},
+  {"push5.s",        REG_STK | REG_FRM,    REG_STK},
+  {"push5.adr",      REG_STK | REG_FRM,    REG_STK},
+  {"load.both",      REG_NONE,             REG_PRI | REG_ALT},
+  {"load.s.both",    REG_FRM,              REG_PRI | REG_ALT},
+  {"const",          REG_NONE,             REG_NONE},
+  {"const.s",        REG_FRM,              REG_NONE},
+  {"sysreq.d",       REG_NONE,             REG_NONE},
+  {"sysreq.nd",      REG_NONE,             REG_NONE},
+  {"sysreq.n",       REG_NONE,             REG_PRI | REG_COD |
+                                           REG_DAT | REG_HEA |
+                                           REG_STP | REG_STK |
+                                           REG_FRM | REG_CIP}
 };
 
 Instruction::Instruction():
@@ -289,6 +315,13 @@ cell CaseTable::FindMaxValue() const {
   return *max_value;
 }
 
+// SA-MP (Pawn 3.2) patches SYSREQ.C into SYSREQ.D (135) at run time and keeps
+// that opcode in amx->sysreq_d. Pawn 3.10 (open.mp) never puts its SYSREQ.D
+// (158) in code, and there 135 is SYSREQ.N, which has two operands.
+static bool HasSysreqD135(AMXRef amx) {
+  return amx->sysreq_d != 0 && Opcode(amx->sysreq_d).GetId() == OP_SYSREQ_D;
+}
+
 bool DecodeInstruction(AMXRef amx, cell address) {
   static Instruction instr;
   return DecodeInstruction(amx, address, instr);
@@ -299,9 +332,45 @@ bool DecodeInstruction(AMXRef amx, cell address, Instruction &instr) {
   instr.set_address(address);
 
   Opcode opcode(*reinterpret_cast<cell*>(amx.code() + address));
+  if (opcode.GetId() >= NUM_RUNTIME_OPCODES) {
+    return false;
+  }
+  if (opcode.GetId() == OP_SYSREQ_D && !HasSysreqD135(amx)) {
+    opcode = Opcode(OP_SYSREQ_N);
+  }
 
   address += sizeof(cell);
   instr.set_opcode(opcode);
+
+  int num_operands = 0;
+  switch (opcode.GetId()) {
+    case OP_PUSH2_C:    case OP_PUSH2:      case OP_PUSH2_S:
+    case OP_PUSH2_ADR:  case OP_LOAD_BOTH:  case OP_LOAD_S_BOTH:
+    case OP_CONST:      case OP_CONST_S:    case OP_SYSREQ_N:
+      num_operands = 2;
+      break;
+    case OP_PUSH3_C:    case OP_PUSH3:      case OP_PUSH3_S:
+    case OP_PUSH3_ADR:
+      num_operands = 3;
+      break;
+    case OP_PUSH4_C:    case OP_PUSH4:      case OP_PUSH4_S:
+    case OP_PUSH4_ADR:
+      num_operands = 4;
+      break;
+    case OP_PUSH5_C:    case OP_PUSH5:      case OP_PUSH5_S:
+    case OP_PUSH5_ADR:
+      num_operands = 5;
+      break;
+    default:
+      break;
+  }
+  if (num_operands > 0) {
+    for (int i = 0; i < num_operands; i++) {
+      instr.AppendOperand(*reinterpret_cast<cell*>(amx.code() + address));
+      address += sizeof(cell);
+    }
+    return true;
+  }
 
   switch (opcode.GetId()) {
     case OP_LOAD_PRI:   case OP_LOAD_ALT:   case OP_LOAD_S_PRI:

@@ -76,12 +76,29 @@ enum OpcodeID {
   OP_SWITCH,       OP_CASETBL,      OP_SWAP_PRI,
   OP_SWAP_ALT,     OP_PUSH_ADR,     OP_NOP,
   OP_SYSREQ_D,     OP_SYMTAG,       OP_BREAK,
+  // Pawn 3.10 (open.mp) macro instructions.
+  OP_PUSH2_C,      OP_PUSH2,        OP_PUSH2_S,      OP_PUSH2_ADR,
+  OP_PUSH3_C,      OP_PUSH3,        OP_PUSH3_S,      OP_PUSH3_ADR,
+  OP_PUSH4_C,      OP_PUSH4,        OP_PUSH4_S,      OP_PUSH4_ADR,
+  OP_PUSH5_C,      OP_PUSH5,        OP_PUSH5_S,      OP_PUSH5_ADR,
+  OP_LOAD_BOTH,    OP_LOAD_S_BOTH,  OP_CONST,        OP_CONST_S,
+  // open.mp's own SYSREQ.D/SYSREQ.ND: never in code, open.mp doesn't patch.
+  OP_OMP_SYSREQ_D, OP_OMP_SYSREQ_ND,
+  // Not an opcode value: open.mp's 135, see DecodeInstruction().
+  OP_SYSREQ_N,
   OP_LAST_
 };
 
 const int NUM_OPCODES = OP_LAST_;
 
+// Size of the runtime's opcode table: open.mp's OP_NUM_OPCODES (160).
+const int NUM_RUNTIME_OPCODES = OP_SYSREQ_N;
+
 OpcodeID RelocateOpcode(cell opcode);
+
+// Index of `opcode` in a runtime's label table; `opcode` as is if the table
+// is NULL or doesn't contain it.
+cell FindOpcode(const cell *opcode_table, cell opcode);
 
 class Opcode {
  public:

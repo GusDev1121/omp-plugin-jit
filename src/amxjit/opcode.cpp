@@ -41,22 +41,21 @@ cell *GetOpcodeTable() {
   #endif
 }
 
-cell FindOpcode(cell *opcode_table, cell opcode) {
-  #ifdef AMXJIT_RELOCATE_OPCODES
-    assert(opcode_table != 0);
-    for (int i = 0; i < NUM_OPCODES; i++) {
-      if (opcode_table[i] == opcode) {
-        return i;
-      }
-    }
-    return opcode;
-  #else
-    (void)opcode_table;
-    return opcode;
-  #endif
-}
-
 } // anonymous namespace
+
+cell FindOpcode(const cell *opcode_table, cell opcode) {
+  if (opcode_table == 0) {
+    return opcode;
+  }
+  // shortcut: SA-MP's table has fewer entries; only an invalid opcode scans
+  // past it (reads, never matches a valid one). Pass the size if that bites.
+  for (int i = 0; i < NUM_RUNTIME_OPCODES; i++) {
+    if (opcode_table[i] == opcode) {
+      return i;
+    }
+  }
+  return opcode;
+}
 
 OpcodeID RelocateOpcode(cell opcode) {
   #ifdef AMXJIT_RELOCATE_OPCODES
