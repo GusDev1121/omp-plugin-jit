@@ -116,15 +116,13 @@ jobs:
             r=$?
             # Break up '::' so server output can't act as a workflow command.
             echo "::group::pawncc $flags (exit $r)"; sed 's/::/: :/g' out.txt; echo "::endgroup::"
-            # Annotations are readable without a login; keep them printable.
-            clean() { tr '\n' '|' | tr -cd '[:print:]' | cut -c1-3000; }
-            if [ $r -eq 0 ]; then
-              echo "::notice title=open.mp linux $flags::OK"
-            else
-              fail=1
-              echo "::error title=open.mp linux $flags (exit $r)::$(grep -aE '\[jit\]|smoke|rror|JIT plugin|signal|fault|Loading' out.txt | head -15 | clean)"
-              echo "::notice title=jit.log $flags::$(sed -n '/^--- jit.log tail/,/^--- disassembly/p' out.txt | clean)"
-            fi
+            echo "::notice title=result $flags::exit $r"
+            [ $r -eq 0 ] || fail=1
+            # Annotations are readable without a login: one short, printable line each.
+            { grep -aE '\[jit\]|smoke|rror|JIT plugin|signal|fault|Segmentation' out.txt | head -12
+              sed -n '/^--- jit.log tail/,/^--- disassembly/p' out.txt; } |
+              tr -cd '[:print:]\n' | sed 's/%/%25/g; s/::/: :/g' | cut -c1-300 |
+              while IFS= read -r line; do echo "::notice title=out $flags::$line"; done
           done
           exit $fail
 
