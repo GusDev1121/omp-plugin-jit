@@ -123,7 +123,7 @@ jobs:
             echo "::group::pawncc $flags (exit $r)"; sed 's/::/: :/g' out.txt; echo "::endgroup::"
             echo "::notice title=result $flags::exit $r"
             [ $r -eq 0 ] && continue
-            grep -aE '^#[0-9]|^=> |SIGSEGV|\[jit\]|smoke' out.txt | ann error "$flags"
+            { grep -a '^=> ' out.txt; grep -aE '^#[0-9]|SIGSEGV|\[jit\]|smoke' out.txt; } | ann error "$flags"
             { sed -n '/^--- jit.log tail/,/^--- disassembly/p' out.txt | grep -v '^---'
               grep -aE '^(eip|esp|ebp|eax|ebx|ecx|edx|esi|edi) ' out.txt; } | ann warning "$flags"
             exit 1 # stop at the first failure to keep the annotations readable

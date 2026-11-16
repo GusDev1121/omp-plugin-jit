@@ -1999,6 +1999,9 @@ void CompilerImpl::EmitSysreqCHelper() {
     asm_.sub(esp, ebx);
     asm_.mov(dword_ptr(edx, offsetof(AMX, stk)), esp); // amx->stk = esp - data
     asm_.mov(esp, dword_ptr(esp_label_));
+    // GCC code (open.mp on Linux) needs ESP 16-byte aligned at calls (SSE).
+    // 4 pushes + 4 arguments below keep it aligned at the call.
+    asm_.and_(esp, -16);
     asm_.push(dword_ptr(amx_esp_label_));
     asm_.push(dword_ptr(amx_ebp_label_));
 
@@ -2098,6 +2101,9 @@ void CompilerImpl::EmitSysreqDHelper() {
     asm_.sub(esp, ebx);
     asm_.mov(dword_ptr(edx, offsetof(AMX, stk)), esp); // amx->stk = esp - data
     asm_.mov(esp, dword_ptr(esp_label_));
+    // GCC code (open.mp on Linux) needs ESP 16-byte aligned at calls (SSE):
+    // 3 pushes + 12 bytes padding + 2 arguments = 32.
+    asm_.and_(esp, -16);
     asm_.push(dword_ptr(amx_esp_label_));
     asm_.push(dword_ptr(amx_ebp_label_));
 
@@ -2105,10 +2111,11 @@ void CompilerImpl::EmitSysreqDHelper() {
     asm_.push(ecx); // ALT
 
     // Call the native function.
+    asm_.sub(esp, 12);
     asm_.push(edi); // params
     asm_.push(edx); // amx
     asm_.call(eax); // address
-    asm_.add(esp, 8);
+    asm_.add(esp, 20);
     // At this point the return value is stored in eax.
 
     asm_.pop(ecx); // ALT
