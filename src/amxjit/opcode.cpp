@@ -47,6 +47,13 @@ cell FindOpcode(const cell *opcode_table, cell opcode) {
   if (opcode_table == 0) {
     return opcode;
   }
+  // GCC merges handlers with identical code: in a release amx_Exec, op_casetbl
+  // (data, never run) and op_none are both just ABORT(INVINSTR), so they share
+  // a label. NONE never occurs in code, so such a match is a case table.
+  if (opcode == opcode_table[OP_NONE] &&
+      opcode == opcode_table[OP_CASETBL]) {
+    return OP_CASETBL;
+  }
   // shortcut: SA-MP's table has fewer entries; only an invalid opcode scans
   // past it (reads, never matches a valid one). Pass the size if that bites.
   for (int i = 0; i < NUM_RUNTIME_OPCODES; i++) {

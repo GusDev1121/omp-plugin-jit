@@ -27,6 +27,10 @@ int main() {
   CHECK(FindOpcode(table, 0x1000 + 159 * 4) == 159);
   CHECK(FindOpcode(table, 0x42) == 0x42);
 
+  // GCC merged op_none, op_file and op_casetbl into one label (open.mp Linux).
+  table[OP_FILE] = table[OP_CASETBL] = table[OP_NONE];
+  CHECK(FindOpcode(table, table[OP_NONE]) == OP_CASETBL);
+
   std::printf("opcode_test: OK\n");
   return 0;
 }
