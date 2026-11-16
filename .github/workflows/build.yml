@@ -124,8 +124,8 @@ jobs:
             echo "::notice title=result $flags::exit $r"
             [ $r -eq 0 ] && continue
             { grep -a '^=> ' out.txt; grep -aE '^#[0-9]|SIGSEGV|\[jit\]|smoke [a-zA-Z]|^sum |JIT smoke' out.txt; } | ann error "$flags"
-            { sed -n '/^--- jit.log tail/,/^--- disassembly/p' out.txt | grep -v '^---'
-              grep -aE '^(eip|esp|ebp|eax|ebx|ecx|edx|esi|edi) ' out.txt; } | ann warning "$flags"
+            { grep -aE '^(eip|esp|eax) ' out.txt
+              sed '/^--- jit.log tail/,$d' out.txt | grep -avE 'component|^\s*$|^\[New Thread|^\[Thread|libthread_db|^Using host' | tail -7; } | ann warning "$flags"
             exit 1 # stop at the first failure to keep the annotations readable
           done
 
