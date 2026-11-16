@@ -71,11 +71,12 @@ jobs:
           name: jit-linux
       - name: Try loading on each glibc
         run: |
+          set +e # a failing distro is a result to report, not a script error
           fail=0
           for img in i386/debian:8 i386/ubuntu:16.04 i386/debian:9 i386/ubuntu:18.04 i386/debian:10 i386/debian:12; do
-            # ldd exits non-zero on missing symbols; that's a result here, not a script error.
-            out=$(docker run --rm -v "$PWD:/p" "$img" sh -c 'ldd --version | head -1; ldd -r /p/jit.so' 2>&1) || true
-            glibc=$(echo "$out" | head -1 | grep -o '[0-9]\.[0-9]*$')
+            docker pull -q "$img" >/dev/null
+            out=$(docker run --rm -v "$PWD:/p" "$img" sh -c 'ldd --version | head -1; ldd -r /p/jit.so' 2>&1)
+            glibc=$(echo "$out" | grep -m1 '^ldd' | grep -o '[0-9]\.[0-9]*$')
             if echo "$out" | grep -q 'not found'; then res=FAIL; else res=OK; fi
             echo "::group::$img (glibc $glibc): $res"; echo "$out"; echo "::endgroup::"
             echo "::notice title=$img glibc $glibc $res::$(echo "$out" | grep 'not found' | head -3 | tr '\n' ' ')"
