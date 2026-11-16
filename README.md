@@ -41,6 +41,33 @@ i.e. CPU bound code. It will not improve performance of those parts of code
 that spend time on I/O operations such as reading from a database or the 
 file system.
 
+Benchmark (open.mp)
+-------------------
+
+[`benchmarks/omp_cpu.pwn`](benchmarks/omp_cpu.pwn) on an open.mp server with
+no players, compiled with pawncc 3.10.11 `-d0 -O1`. Median of 3 runs per mode;
+checksums are identical with and without JIT. More detail, including a real
+gamemode, is in [docs/benchmark-openmp.md](docs/benchmark-openmp.md).
+
+| Test | Windows: no JIT → JIT (ms) | Speedup | Linux: no JIT → JIT (ms) | Speedup |
+|---|---|---|---|---|
+| `int_arith`: 50M LCG iterations | 952 → 68 | **14.0×** | 319 → 78 | **4.1×** |
+| `array_sort`: bubble sort, 4000 items | 740 → 24 | **30.8×** | 490 → 30 | **16.3×** |
+| `func_calls`: recursive `Fib(30)` | 73 → 10 | **7.3×** | 41 → 11 | **3.7×** |
+| `float_math`: 10M float operations | 1001 → 413 | **2.4×** | 1116 → 487 | **2.3×** |
+| `native_calls`: 5M `strlen` | 182 → 70 | **2.6×** | 144 → 86 | **1.7×** |
+| `string_format`: 300k `format` + `strfind` | 161 → 143 | **1.1×** | 135 → 127 | **1.1×** |
+
+- Windows: open.mp 1.5.8, AMD Ryzen 7 7840HS.
+- Linux: open.mp 1.6.7, GitHub Actions runner (AMD EPYC 7763, 4 vCPU, shared
+  VM). Rerun it by pushing a commit with `[bench]` in its message.
+
+The machines differ, so compare speedups rather than milliseconds. Speedups are
+lower on Linux because open.mp's Linux build (GCC) interprets about 3× faster
+than the Windows build (MSVC), while JIT-compiled code runs at about the same
+speed on both. Code that mostly calls natives (`format`, `strlen`) gains little
+either way: the JIT only speeds up the Pawn code around them.
+
 Building from source code
 -------------------------
 
