@@ -28,6 +28,9 @@
 #include <cstring>
 #include <string>
 #include <configreader.h>
+#ifndef _WIN32
+  #include <dlfcn.h>
+#endif
 #include "jithandler.h"
 #include "logprintf.h"
 #include "plugin.h"
@@ -65,6 +68,17 @@ class ErrorHandler: public amxjit::CompileErrorHandler {
     jit_printf("  raw: %08x %08x %08x (opcode id %d, flags %04x)",
                (unsigned)p[0], (unsigned)p[1], (unsigned)p[2],
                (int)amxjit::RelocateOpcode(p[0]), (unsigned)amx_->flags);
+    #ifndef _WIN32
+      // Code patched after load points into whoever patched it.
+      for (int i = 0; i < 3; i += 2) {
+        Dl_info info;
+        if (dladdr(reinterpret_cast<void *>(p[i]), &info) != 0) {
+          jit_printf("  cell %d is in %s (near %s)", i,
+                     info.dli_fname ? info.dli_fname : "?",
+                     info.dli_sname ? info.dli_sname : "?");
+        }
+      }
+    #endif
   }
  private:
   AMX *amx_;
