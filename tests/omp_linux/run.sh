@@ -26,6 +26,8 @@ cd "$srv" || exit 2
 timeout 20 ./omp-server > out.txt 2>&1
 cat out.txt
 if grep -q '\[jit\]' out.txt || ! grep -q 'JIT smoke OK' out.txt; then
+  echo "--- jit.log tail"
+  tail -5 plugins/jit.log 2>/dev/null
   echo "--- disassembly"
   LD_LIBRARY_PATH="$pawnc/lib" "$pawnc/bin/pawndisasm" gamemodes/smoke.amx
   head -40 gamemodes/smoke.lst 2>/dev/null
