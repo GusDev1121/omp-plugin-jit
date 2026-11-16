@@ -99,7 +99,7 @@ jobs:
       - name: Fetch open.mp server and pawncc
         run: |
           curl -sSL https://github.com/openmultiplayer/open.mp/releases/download/v1.6.7.3218/open.mp-linux-x86.tar.gz | tar xz
-          curl -sSL https://github.com/pawn-lang/compiler/releases/download/v3.10.10/pawnc-3.10.10-linux.tar.gz | tar xz
+          curl -sSL https://github.com/openmultiplayer/compiler/releases/download/v3.10.11/pawnc-3.10.11-linux.tar.gz | tar xz
           srv=$(dirname "$(find . -name omp-server -type f | head -1)")
           echo "SERVER_DIR=$srv" >> "$GITHUB_ENV"
           echo "::notice title=open.mp server dir::$srv"
@@ -117,7 +117,7 @@ jobs:
           ann() { tr -cd '[:print:]\n' | sed 's/%/%25/g; s/::/: :/g' | cut -c1-300 | head -9 |
                   while IFS= read -r line; do echo "::$1 title=$2::$line"; done; }
           for flags in "-d3" "-d0 -O2" "-d3 -O2"; do
-            sh tests/omp_linux/run.sh dist/jit.so pawnc-3.10.10-linux "$SERVER_DIR" $flags > out.txt 2>&1
+            sh tests/omp_linux/run.sh dist/jit.so pawnc-3.10.11-linux "$SERVER_DIR" $flags > out.txt 2>&1
             r=$?
             # Break up '::' so server output can't act as a workflow command.
             echo "::group::pawncc $flags (exit $r)"; sed 's/::/: :/g' out.txt; echo "::endgroup::"
