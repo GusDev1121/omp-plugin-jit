@@ -1,6 +1,6 @@
 #!/bin/sh
 # Runs smoke.pwn on an open.mp Linux server with jit.so as a legacy plugin.
-# Inside a 32-bit container: run.sh <jit.so> <pawnc dir> <server dir> [pawncc flags...]
+# Needs 32-bit libc, libstdc++ and libatomic: run.sh <jit.so> <pawnc dir> <server dir> [pawncc flags...]
 # Exits non-zero if the JIT reported anything or the script didn't pass.
 jit=$(realpath "$1") pawnc=$(realpath "$2") srv=$(realpath "$3")
 shift 3

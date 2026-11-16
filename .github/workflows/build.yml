@@ -87,7 +87,7 @@ jobs:
           exit $fail
 
   omp-linux:
-    # jit.so as a legacy plugin on a real open.mp Linux server (32-bit container).
+    # jit.so as a legacy plugin on a real open.mp Linux server.
     needs: linux
     runs-on: ubuntu-latest
     steps:
@@ -103,16 +103,19 @@ jobs:
           srv=$(dirname "$(find . -name omp-server -type f | head -1)")
           echo "SERVER_DIR=$srv" >> "$GITHUB_ENV"
           echo "::notice title=open.mp server dir::$srv"
+      - name: Install 32-bit runtime libraries
+        # omp-server and pawncc are 32-bit; omp-server also needs libatomic.
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -y -q libc6:i386 libstdc++6:i386 libatomic1:i386
       - name: Run gamemode with JIT
         run: |
           set +e
           fail=0
           for flags in "-d3" "-d0 -O2" "-d3 -O2"; do
             echo "::notice title=start $flags::running"
-            # omp-server needs libatomic, which the base image lacks.
-            docker run --rm -v "$PWD:/w" -w /w i386/debian:12 sh -c \
-              'apt-get update -qq >/dev/null && apt-get install -y -qq libatomic1 >/dev/null && sh tests/omp_linux/run.sh "$@"' \
-              _ dist/jit.so pawnc-3.10.10-linux "$SERVER_DIR" $flags > out.txt 2>&1
+            sh tests/omp_linux/run.sh dist/jit.so pawnc-3.10.10-linux "$SERVER_DIR" $flags > out.txt 2>&1
             r=$?
             # Break up '::' so server output can't act as a workflow command.
             echo "::group::pawncc $flags (exit $r)"; sed 's/::/: :/g' out.txt; echo "::endgroup::"
