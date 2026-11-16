@@ -23,7 +23,13 @@ EOF
 printf 'jit_log 1\n' > "$srv/server.cfg"
 
 cd "$srv" || exit 2
-timeout 20 ./omp-server > out.txt 2>&1
+if command -v gdb >/dev/null; then
+  # On a crash: backtrace, faulting instruction and registers.
+  timeout 60 gdb -q -batch -ex run -ex bt -ex 'x/4i $pc' -ex 'info registers' \
+    --args ./omp-server > out.txt 2>&1
+else
+  timeout 20 ./omp-server > out.txt 2>&1
+fi
 cat out.txt
 if grep -q '\[jit\]' out.txt || ! grep -q 'JIT smoke OK' out.txt; then
   echo "--- jit.log tail"

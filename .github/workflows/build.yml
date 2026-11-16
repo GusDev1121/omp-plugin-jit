@@ -108,26 +108,26 @@ jobs:
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update -q
-          sudo apt-get install -y -q libc6:i386 libstdc++6:i386 libatomic1:i386
+          sudo apt-get install -y -q libc6:i386 libstdc++6:i386 libatomic1:i386 gdb
       - name: Run gamemode with JIT
         run: |
           set +e
-          fail=0
+          # Annotations are readable without a login, at most 10 per kind and
+          # step: one short, printable line each.
+          ann() { tr -cd '[:print:]\n' | sed 's/%/%25/g; s/::/: :/g' | cut -c1-300 | head -9 |
+                  while IFS= read -r line; do echo "::$1 title=$2::$line"; done; }
           for flags in "-d3" "-d0 -O2" "-d3 -O2"; do
-            echo "::notice title=start $flags::running"
             sh tests/omp_linux/run.sh dist/jit.so pawnc-3.10.10-linux "$SERVER_DIR" $flags > out.txt 2>&1
             r=$?
             # Break up '::' so server output can't act as a workflow command.
             echo "::group::pawncc $flags (exit $r)"; sed 's/::/: :/g' out.txt; echo "::endgroup::"
             echo "::notice title=result $flags::exit $r"
-            [ $r -eq 0 ] || fail=1
-            # Annotations are readable without a login: one short, printable line each.
-            { grep -aE '\[jit\]|smoke|rror|JIT plugin|signal|fault|Segmentation' out.txt | head -12
-              sed -n '/^--- jit.log tail/,/^--- disassembly/p' out.txt; } |
-              tr -cd '[:print:]\n' | sed 's/%/%25/g; s/::/: :/g' | cut -c1-300 |
-              while IFS= read -r line; do echo "::notice title=out $flags::$line"; done
+            [ $r -eq 0 ] && continue
+            grep -aE '^#[0-9]|^=> |SIGSEGV|\[jit\]|smoke' out.txt | ann error "$flags"
+            { sed -n '/^--- jit.log tail/,/^--- disassembly/p' out.txt | grep -v '^---'
+              grep -aE '^(eip|esp|ebp|eax|ebx|ecx|edx|esi|edi) ' out.txt; } | ann warning "$flags"
+            exit 1 # stop at the first failure to keep the annotations readable
           done
-          exit $fail
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
