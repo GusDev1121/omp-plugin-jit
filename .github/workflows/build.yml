@@ -43,8 +43,9 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src -e DEBIAN_FRONTEND=noninteractive ubuntu:18.04 sh -ec '
             apt-get update -q
             apt-get install -y -q cmake make g++-multilib git
-            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-            cmake --build build --target jit -- -j"$(nproc)"'
+            mkdir -p build && cd build
+            cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+            cmake --build . --target jit -- -j"$(nproc)"'
       - name: Check binary is 32-bit
         run: file build/jit.so | tee /dev/stderr | grep -q 'ELF 32-bit'
       - name: Check runtime requirements (no libstdc++, glibc <= 2.27)
