@@ -73,10 +73,12 @@ jobs:
         run: |
           fail=0
           for img in i386/debian:8 i386/ubuntu:16.04 i386/debian:9 i386/ubuntu:18.04 i386/debian:10 i386/debian:12; do
-            out=$(docker run --rm -v "$PWD:/p" "$img" sh -c 'ldd --version | head -1; ldd -r /p/jit.so' 2>&1)
+            # ldd exits non-zero on missing symbols; that's a result here, not a script error.
+            out=$(docker run --rm -v "$PWD:/p" "$img" sh -c 'ldd --version | head -1; ldd -r /p/jit.so' 2>&1) || true
             glibc=$(echo "$out" | head -1 | grep -o '[0-9]\.[0-9]*$')
             if echo "$out" | grep -q 'not found'; then res=FAIL; else res=OK; fi
             echo "::group::$img (glibc $glibc): $res"; echo "$out"; echo "::endgroup::"
+            echo "::notice title=$img glibc $glibc $res::$(echo "$out" | grep 'not found' | head -3 | tr '\n' ' ')"
             echo "| $img | $glibc | $res |" >> rows
             if [ $res = FAIL ] && [ "$(printf '%s\n2.27\n' "$glibc" | sort -V | head -1)" = 2.27 ]; then fail=1; fi
           done
