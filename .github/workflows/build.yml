@@ -129,6 +129,31 @@ jobs:
             exit 1 # stop at the first failure to keep the annotations readable
           done
 
+  omp-linux-bench:
+    # benchmarks/omp_cpu.pwn on open.mp Linux, without vs with JIT. Slow and
+    # noisy on shared runners, so only for commits whose message has [bench].
+    if: contains(github.event.head_commit.message, '[bench]')
+    needs: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: jit-linux
+          path: dist
+      - name: Fetch open.mp server and pawncc, install 32-bit libraries
+        run: |
+          curl -sSL https://github.com/openmultiplayer/open.mp/releases/download/v1.6.7.3218/open.mp-linux-x86.tar.gz | tar xz
+          curl -sSL https://github.com/openmultiplayer/compiler/releases/download/v3.10.11/pawnc-3.10.11-linux.tar.gz | tar xz
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -y -q libc6:i386 libstdc++6:i386 libatomic1:i386
+          echo "::notice title=runner::$(lscpu | sed -n 's/^Model name: *//p'), $(nproc) vCPU"
+      - name: Benchmark
+        run: |
+          sh tests/omp_linux/bench.sh dist/jit.so pawnc-3.10.11-linux Server 3 | tee bench.txt
+          node tests/omp_linux/bench_report.js bench.txt
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [windows, linux]
