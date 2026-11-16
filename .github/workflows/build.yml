@@ -108,12 +108,14 @@ jobs:
           set +e
           fail=0
           for flags in "-d3" "-d0 -O2" "-d3 -O2"; do
+            echo "::notice title=start $flags::running"
             # omp-server needs libatomic, which the base image lacks.
             docker run --rm -v "$PWD:/w" -w /w i386/debian:12 sh -c \
               'apt-get update -qq >/dev/null && apt-get install -y -qq libatomic1 >/dev/null && sh tests/omp_linux/run.sh "$@"' \
               _ dist/jit.so pawnc-3.10.10-linux "$SERVER_DIR" $flags > out.txt 2>&1
             r=$?
-            echo "::group::pawncc $flags (exit $r)"; cat out.txt; echo "::endgroup::"
+            # Break up '::' so server output can't act as a workflow command.
+            echo "::group::pawncc $flags (exit $r)"; sed 's/::/: :/g' out.txt; echo "::endgroup::"
             # Annotations are readable without a login; keep them printable.
             clean() { tr '\n' '|' | tr -cd '[:print:]' | cut -c1-3000; }
             if [ $r -eq 0 ]; then
