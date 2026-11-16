@@ -49,5 +49,9 @@ add_samp_plugin(jit_sleep
 
 add_subdirectory(amxjit)
 target_link_libraries(jit amxjit configreader subhook)
+if(UNIX)
+  # Servers often ship an older libstdc++ than the build machine (GLIBCXX_x not found).
+  target_link_libraries(jit -static-libstdc++ -static-libgcc)
+endif()
 
 install(TARGETS jit LIBRARY DESTINATION ".")

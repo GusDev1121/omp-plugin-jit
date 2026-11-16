@@ -35,22 +35,52 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Install 32-bit toolchain
-        run: |
-          sudo apt-get update -q
-          sudo apt-get install -y gcc-multilib g++-multilib
-      - name: Configure
+      - name: Build in Ubuntu 18.04 (glibc 2.27)
+        # Same base as open.mp and streamer, so jit.so loads on any distro with glibc >= 2.27.
+        # Plain docker run, not `container:` — Node 20 actions can't run on 18.04's glibc.
         # Root CMakeLists.txt adds -m32; open.mp and SA-MP servers are 32-bit.
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
-      - name: Build
-        run: cmake --build build --target jit -j
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src -e DEBIAN_FRONTEND=noninteractive ubuntu:18.04 sh -ec '
+            apt-get update -q
+            apt-get install -y -q cmake make g++-multilib git
+            cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+            cmake --build build --target jit -- -j"$(nproc)"'
       - name: Check binary is 32-bit
         run: file build/jit.so | tee /dev/stderr | grep -q 'ELF 32-bit'
+      - name: Check runtime requirements (no libstdc++, glibc <= 2.27)
+        run: |
+          if objdump -T build/jit.so | grep GLIBCXX; then echo "jit.so needs libstdc++"; exit 1; fi
+          max=$(objdump -T build/jit.so | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)
+          echo "requires $max"
+          [ "$(printf '%s\nGLIBC_2.27\n' "$max" | sort -V | tail -1)" = GLIBC_2.27 ]
       - uses: actions/upload-artifact@v4
         with:
           name: jit-linux
           path: build/jit.so
           if-no-files-found: error
+
+  glibc-compat:
+    # Resolves jit.so's symbols (ldd -r, same as the server's dlopen) on 32-bit distros.
+    # Only glibc >= 2.27 must pass; older ones are reported, not failed.
+    needs: linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: jit-linux
+      - name: Try loading on each glibc
+        run: |
+          fail=0
+          for img in i386/debian:8 i386/ubuntu:16.04 i386/debian:9 i386/ubuntu:18.04 i386/debian:10 i386/debian:12; do
+            out=$(docker run --rm -v "$PWD:/p" "$img" sh -c 'ldd --version | head -1; ldd -r /p/jit.so' 2>&1)
+            glibc=$(echo "$out" | head -1 | grep -o '[0-9]\.[0-9]*$')
+            if echo "$out" | grep -q 'not found'; then res=FAIL; else res=OK; fi
+            echo "::group::$img (glibc $glibc): $res"; echo "$out"; echo "::endgroup::"
+            echo "| $img | $glibc | $res |" >> rows
+            if [ $res = FAIL ] && [ "$(printf '%s\n2.27\n' "$glibc" | sort -V | head -1)" = 2.27 ]; then fail=1; fi
+          done
+          { echo "| image | glibc | jit.so |"; echo "|---|---|---|"; cat rows; } | tee -a "$GITHUB_STEP_SUMMARY"
+          exit $fail
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
